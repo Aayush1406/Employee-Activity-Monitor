@@ -12,17 +12,30 @@ import win32gui
 from datetime import datetime
 import pypyodbc as odbc
 import pyodbc
-
 import mysql.connector
+from mysql.connector import pooling
 
-conn = mysql.connector.connect(
+
+# conn = mysql.connector.connect(
+#     host="localhost",  # e.g., 'localhost' or your AWS RDS endpoint
+#     user="root",  # MySQL username
+#     password="aayush",  # MySQL password
+#     database="Device_Data"  # The database you are connecting to
+# )
+
+connection_pool = pooling.MySQLConnectionPool(
+   
+    pool_name = "mypool",
     host="localhost",  # e.g., 'localhost' or your AWS RDS endpoint
     user="root",  # MySQL username
     password="aayush",  # MySQL password
-    database="Device_Data"  # The database you are connecting to
+    database="Device_Data"  # The database you are connecting to    
 )
 
-cursor = conn.cursor()
+# cursor = conn.cursor()
+
+def get_connection():
+    return connection_pool.get_connection()
 
 
 user32 = ctypes.windll.user32 #loads user32 DLL into python script.
@@ -153,91 +166,150 @@ def get_foreground_process_details(pid, current_handle):
 
 
 def insert_foreground_process_details_in_db(foreground_details):
-        
-    insert_query = """ 
-    INSERT INTO applicationusagelogs(Title_Name, Child_Name, Executable_Path, Process_Name, Process_Status, Process_Create_Time ,Pid, Current_Handle, Duration, Window_Start_Time, Window_End_Time, Window_Active_Status)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s ,%s , %s, %s ) """
-    cursor.execute(insert_query,(foreground_details['window_title'],foreground_details['child_name'], foreground_details['executable_path'],
-                                foreground_details['process_name'],foreground_details['process_status'],foreground_details['process_create_time'],
-                                foreground_details['pid'], foreground_details['current_handle'], None, None, None, None ))
-    conn.commit()
-    print("record inserted into db successfully !")
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()    
+        insert_query = """ 
+        INSERT INTO applicationusagelogs(Title_Name, Child_Name, Executable_Path, Process_Name, Process_Status, Process_Create_Time ,Pid, Current_Handle, Duration, Window_Start_Time, Window_End_Time, Window_Active_Status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s ,%s , %s, %s ) """
+        cursor.execute(insert_query,(foreground_details['window_title'],foreground_details['child_name'], foreground_details['executable_path'],
+                                    foreground_details['process_name'],foreground_details['process_status'],foreground_details['process_create_time'],
+                                    foreground_details['pid'], foreground_details['current_handle'], None, None, None, None ))
+        conn.commit()
+        print("record inserted into db successfully !")
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
 
         
 def calculate_window_end_time(old_pid):
-    select_query = "SELECT * FROM applicationusagelogs WHERE Pid = %s and Window_Active_Status = %s"
-    cursor.execute(select_query, (old_pid,'Active'))
-    record_value = cursor.fetchone()
-    # print("----->",record_value)
-    if record_value:
-        update_query = "Update applicationusagelogs set Window_End_Time = %s where Pid = %s and Window_Active_Status=%s"
-        current_time = datetime.now()
-        current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
-        cursor.execute(update_query, (current_time, old_pid,'Active'))
-        conn.commit()
-        # set_inactive_window_status(old_pid)
-        print("Window End Time = ", current_time)
-        
+    
+    try:
+        conn = get_connection()
+        cursor = conn.cursor() 
+        select_query = "SELECT * FROM applicationusagelogs WHERE Pid = %s and Window_Active_Status = %s"
+        cursor.execute(select_query, (old_pid,'Active'))
+        record_value = cursor.fetchone()
+        # print("----->",record_value)
+        if record_value:
+            update_query = "Update applicationusagelogs set Window_End_Time = %s where Pid = %s and Window_Active_Status=%s"
+            current_time = datetime.now()
+            current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
+            cursor.execute(update_query, (current_time, old_pid,'Active'))
+            conn.commit()
+            # set_inactive_window_status(old_pid)
+            print("Window End Time = ", current_time)
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
     
 def calculate_window_start_time(pid, window_title_name):
 
-    set_active_window_status(pid)    
-    update_query = "Update ApplicationUsageLogs set Window_Start_Time = %s where Pid = %s and Window_Active_Status = %s"
-    current_time = datetime.now()
-    current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
-    cursor.execute(update_query,(current_time, pid,'Active'))
-    conn.commit()
-    print('Window Start Time = ',current_time)
+    try:
+        conn = get_connection()
+        cursor = conn.cursor() 
+        set_active_window_status(pid)    
+        update_query = "Update ApplicationUsageLogs set Window_Start_Time = %s where Pid = %s and Window_Active_Status = %s"
+        current_time = datetime.now()
+        current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
+        cursor.execute(update_query,(current_time, pid,'Active'))
+        conn.commit()
+        print('Window Start Time = ',current_time)
+    
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
+
 
 
 def set_active_window_status(pid):
-    
-    update_query = "Update ApplicationUsageLogs set Window_Active_Status = %s where Pid = %s and Window_Start_Time is Null"
-    cursor.execute(update_query,('Active',pid))
-    conn.commit()
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()     
+        update_query = "Update ApplicationUsageLogs set Window_Active_Status = %s where Pid = %s and Window_Start_Time is Null"
+        cursor.execute(update_query,('Active',pid))
+        conn.commit()
+
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
+
 
 def set_inactive_window_status(pid):
-    update_query = "Update ApplicationUsageLogs set Window_Active_Status = %s where Pid = %s and Window_End_Time is Not Null"
-    cursor.execute(update_query,('Inactive',pid))
-    conn.commit()
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()     
+        update_query = "Update ApplicationUsageLogs set Window_Active_Status = %s where Pid = %s and Window_End_Time is Not Null"
+        cursor.execute(update_query,('Inactive',pid))
+        conn.commit()
+    
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
 
 def check_process_status(pid,handle):
     process_name = get_process_name(pid)
     # print("Last running process =",process_name)
-    select_query = "SELECT * FROM applicationusagelogs WHERE Pid = %s"
-    cursor.execute(select_query, (pid,))
-    record_value = cursor.fetchall()
-    
-    if record_value and get_process_name(pid)=="No Such Process":   
-        
-        update_select_query = """UPDATE ApplicationUsageLogs AS t1
-                                JOIN (
-                                    SELECT Pid, MAX(Window_End_Time) AS max_end_time
-                                    FROM ApplicationUsageLogs
-                                    WHERE Pid = %s
-                                    GROUP BY Pid
-                                ) AS t2
-                                ON t1.Pid = t2.Pid AND t1.Window_End_Time = t2.max_end_time
-                                SET t1.Process_Status = %s;
-                                """   
-        cursor.execute(update_select_query,(pid,"Stopped"))
-        conn.commit()        
 
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()     
+        select_query = "SELECT * FROM applicationusagelogs WHERE Pid = %s"
+        cursor.execute(select_query, (pid,))
+        record_value = cursor.fetchall()
+        
+        if record_value and get_process_name(pid)=="No Such Process":   
+            
+            update_select_query = """UPDATE ApplicationUsageLogs AS t1
+                                    JOIN (
+                                        SELECT Pid, MAX(Window_End_Time) AS max_end_time
+                                        FROM ApplicationUsageLogs
+                                        WHERE Pid = %s
+                                        GROUP BY Pid
+                                    ) AS t2
+                                    ON t1.Pid = t2.Pid AND t1.Window_End_Time = t2.max_end_time
+                                    SET t1.Process_Status = %s;
+                                    """   
+            cursor.execute(update_select_query,(pid,"Stopped"))
+            conn.commit()        
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
+
+    
 def calculate_process_duration(old_pid):
-    select_query = "Select Window_Start_Time, Window_End_Time from ApplicationUsageLogs where Pid = %s and Window_Active_Status = %s"
-    cursor.execute(select_query, (old_pid,'Active'))
-    rows = cursor.fetchall()
-    duration = None
-    if rows:
-        for row in rows:
-            window_start_time = datetime.strptime(row[0],'%m-%d-%y %H:%M:%S %p')             
-            window_end_time = datetime.strptime(row[1], '%m-%d-%y %H:%M:%S %p')
-            duration = window_end_time - window_start_time
-            print("duration = ",duration)
-  
-        update_query = "Update ApplicationUsageLogs set duration = %s where Pid = %s and Window_Active_Status = %s"            
-        cursor.execute(update_query,(duration,old_pid,'Active'))
-    set_inactive_window_status(old_pid)
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()     
+        select_query = "Select Window_Start_Time, Window_End_Time from ApplicationUsageLogs where Pid = %s and Window_Active_Status = %s"
+        cursor.execute(select_query, (old_pid,'Active'))
+        rows = cursor.fetchall()
+        duration = None
+        if rows:
+            for row in rows:
+                window_start_time = datetime.strptime(row[0],'%m-%d-%y %H:%M:%S %p')             
+                window_end_time = datetime.strptime(row[1], '%m-%d-%y %H:%M:%S %p')
+                duration = window_end_time - window_start_time
+                print("duration = ",duration)
+    
+            update_query = "Update ApplicationUsageLogs set duration = %s where Pid = %s and Window_Active_Status = %s"            
+            cursor.execute(update_query,(duration,old_pid,'Active'))
+            conn.commit()
+        set_inactive_window_status(old_pid)
+
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()        
 
     
 def keep_running_script(time_interval):
@@ -269,5 +341,6 @@ def main():
 
     time_interval = 1
     keep_running_script(time_interval)
+    
 if __name__ == "__main__":
   main()
