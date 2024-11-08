@@ -10,7 +10,7 @@ def run_activity_monitor():
 
 
 def run_timed_key_listener():
-    timed_key_listener = TimedKeyListener(timeout=60)
+    timed_key_listener = TimedKeyListener(timeout=10)
     timed_key_listener.start()
     
 def run_timed_mouse_listener():
@@ -25,8 +25,8 @@ if __name__=="__main__":
     
     employee_activity_thread.start()
     key_listener_thread.start()
-    mouse_listener_thread.start()
+    # mouse_listener_thread.start()
     
     employee_activity_thread.join()
     key_listener_thread.join()
-    mouse_listener_thread.join()
+    # mouse_listener_thread.join()

@@ -27,7 +27,7 @@ class ActivityMonitor:
         
         self.user32 = ctypes.windll.user32 #loads user32 DLL into python script.    
         self.connection_pool = pooling.MySQLConnectionPool(
-        
+            
             pool_name = "mypool",
             host="localhost",  # e.g., 'localhost' or your AWS RDS endpoint
             user="root",  # MySQL username
@@ -78,11 +78,6 @@ class ActivityMonitor:
                     ("rcTitleBar", wintypes.RECT),
                     ("rgstate", wintypes.DWORD * 6)]    
 
-    # def get_title_bar_info(hwnd):
-    #     tbi = TITLEBARINFO()
-    #     tbi.cbSize = ctypes.sizeof(TITLEBARINFO)
-    #     ctypes.windll.user32.GetTitleBarInfo(hwnd, ctypes.byref(tbi))
-    #     return tbi
 
     def get_window_title(self,current_handle,pid):
         old_handle = None
@@ -101,8 +96,8 @@ class ActivityMonitor:
 
     def get_process_create_time(self,pid):
         process = psutil.Process(pid)    
-        process_create_time = datetime.fromtimestamp(process.create_time())
-        process_create_time = process_create_time.strftime('%m-%d-%y %H:%M:%S %p')
+        process_create_time = datetime.fromtimestamp(process.create_time())        
+        print(process_create_time)
         return process_create_time
 
     def get_process_name(self,pid):
@@ -188,7 +183,7 @@ class ActivityMonitor:
             if record_value:
                 update_query = "Update applicationusagelogs set Window_End_Time = %s where Pid = %s and Window_Active_Status=%s"
                 current_time = datetime.now()
-                current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
+                # current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
                 cursor.execute(update_query, (current_time, old_pid,'Active'))
                 conn.commit()
                 # set_inactive_window_status(old_pid)
@@ -206,7 +201,7 @@ class ActivityMonitor:
             self.set_active_window_status(pid)    
             update_query = "Update ApplicationUsageLogs set Window_Start_Time = %s where Pid = %s and Window_Active_Status = %s"
             current_time = datetime.now()
-            current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
+            # current_time = current_time.strftime('%m-%d-%y %H:%M:%S %p')
             cursor.execute(update_query,(current_time, pid,'Active'))
             conn.commit()
             print('Window Start Time = ',current_time)
@@ -288,9 +283,10 @@ class ActivityMonitor:
             rows = cursor.fetchall()
             duration = None
             if rows:
-                for row in rows:
-                    window_start_time = datetime.strptime(row[0],'%m-%d-%y %H:%M:%S %p')             
-                    window_end_time = datetime.strptime(row[1], '%m-%d-%y %H:%M:%S %p')
+                for row in rows:                    
+                    window_start_time = row[0]             
+                    window_end_time = row[1]
+                    
                     duration = window_end_time - window_start_time
                     print("duration = ",duration)
         
@@ -302,8 +298,7 @@ class ActivityMonitor:
         finally:
             if conn.is_connected():
                 cursor.close()
-                conn.close()        
-
+                conn.close()                
         
     def keep_running_script(self,time_interval):
 
@@ -321,9 +316,7 @@ class ActivityMonitor:
                 self.calculate_window_end_time(old_pid)
                 self.check_process_status(old_pid,old_handle)
                 self.calculate_process_duration(old_pid)
-
-                
-                # calculateWindowEndTime(old_pid,old_handle)         
+                   
                 
             old_pid = current_pid
             old_handle = current_handle   
